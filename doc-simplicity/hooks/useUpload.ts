@@ -1,22 +1,20 @@
 "use client";
 
+import { generateEmbeddings } from "@/actions/generateEmbeddings";
+import { db, storage } from "@/firebase";
+import { calculatePercent } from "@/lib/percent";
+import { Status, StatusText } from "@/types/status";
 import { useUser } from "@clerk/nextjs";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { v4 as uuidV4 } from "uuid";
-export enum StatusText {
-  UPLOADING = "Uploading file...",
-  UPLOADED = "File uploaded successfully",
-  SAVING = "Saving file to database...",
-  GENERATING = "Generating AI Embeddings. This will only take a few seconds...",
-}
-
-export type Status = StatusText[keyof StatusText];
+import { v4 as uuidv4 } from "uuid";
 
 function useUpload() {
   const [progress, setProgress] = useState<number | null>(null);
-  const [fieldId, setFieldId] = useState<string | null>(null);
+  const [fileId, setFileId] = useState<string | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
 
   const { user } = useUser();
@@ -28,34 +26,73 @@ function useUpload() {
 
     // TODO: FREE/Pro Plan
 
-    setStatus(StatusText.UPLOADING);
+    const fileIdToUploadTo = uuidv4();
 
-    try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ file }),
-      });
+    const storageRef = ref(
+      storage,
+      `users/${user.id}/files/${fileIdToUploadTo}`
+    );
 
-      if (!response.ok) {
-        throw new Error("Failed to upload file");
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    // Register three observers:
+    // 1. 'state_changed' observer, called any time the state changes
+    // 2. Error observer, called on failure
+    // 3. Completion observer, called on successful completion
+
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        // Observe state change events such as progress, pause, and resume
+        // Get task progress, including the number of bytes uploaded and the total number of bytes to be uploaded
+        const percent = calculatePercent(snapshot);
+        setStatus(StatusText.UPLOADING);
+        setProgress(percent);
+      },
+      (error) => {
+        console.error("Error uploading file", error);
+        switch (error.code) {
+          case "storage/unauthorized":
+            console.error("User doesn't have permission to access the object");
+            break;
+          case "storage/canceled":
+            console.error("User canceled the upload");
+            break;
+
+          // ...
+
+          case "storage/unknown":
+            console.error(
+              "Unknown error occurred, inspect error.serverResponse"
+            );
+            break;
+        }
+      },
+      async () => {
+        setStatus(StatusText.UPLOADED);
+
+        // Handle successful uploads on complete
+        // For instance, get the download URL: https://firebasestorage.googleapis.com/...
+        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+
+        setStatus(StatusText.SAVING);
+        await setDoc(doc(db, "users", user.id, "files", fileIdToUploadTo), {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          downloadUrl: downloadUrl,
+          ref: uploadTask.snapshot.ref.fullPath,
+          createdAt: serverTimestamp(),
+        });
+        setStatus(StatusText.GENERATING);
+        // Generate AI embeddings using the fileIdToUploadTo
+        await generateEmbeddings(fileIdToUploadTo);
+        setFileId(fileIdToUploadTo);
       }
-
-      const { field_id } = await response.json();
-      setFieldId(field_id);
-      setStatus(StatusText.UPLOADED);
-
-      // Generate AI embeddings
-      setStatus(StatusText.GENERATING);
-      await generateEmbeddings(field_id);
-
-      setStatus(null);
-    } catch (error) {
-      setStatus(StatusText.UPLOADING);
-      console.error("Error uploading file:", error);
-    }
+    );
   };
+
+  return { progress, status, fileId, handleUpload };
 }
-export { progress, status, fieldId, handleUpload };
+
+export default useUpload;
