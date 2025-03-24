@@ -1,13 +1,13 @@
 import { adminDb } from "@/firebaseAdmin";
 import { auth } from "@clerk/nextjs/server";
 
-function ChatToFilePage({
-  params: { id },
-}: {
+interface ChatToFilePageProps {
   params: {
     id: string;
   };
-}) {
+}
+
+async function ChatToFilePage({ params }: ChatToFilePageProps) {
   auth.protect();
   const { userId } = await auth();
 
@@ -15,7 +15,7 @@ function ChatToFilePage({
     .collection("users")
     .doc(userId!)
     .collection("files")
-    .doc(id)
+    .doc(params.id)
     .get();
 
   const url = ref.data()?.downloadUrl;
@@ -34,4 +34,5 @@ function ChatToFilePage({
     </div>
   );
 }
+
 export default ChatToFilePage;
