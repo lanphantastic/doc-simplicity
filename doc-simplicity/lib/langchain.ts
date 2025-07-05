@@ -2,7 +2,7 @@ import { ChatOpenAI } from "@langchain/openai";
 
 import { OpenAIEmbeddings } from "@langchain/openai";
 
-import { FirestoreService } from "@/services/firestore";
+import { FirestoreService } from "@/services/firestoreService";
 import { PDFService } from "@/services/pdfService";
 import { AuthService } from "@/services/authService";
 import { PineconeService } from "@/services/pineconeService";

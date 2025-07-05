@@ -22,7 +22,7 @@ export class PineconeService {
   ) {
     return await PineconeStore.fromDocuments(docs, embeddings, {
       pineconeIndex: index,
-      namespace: namespace,
+      namespace,
     });
   }
 
@@ -33,7 +33,7 @@ export class PineconeService {
   ) {
     return await PineconeStore.fromExistingIndex(embeddings, {
       pineconeIndex: index,
-      namespace: namespace,
+      namespace,
     });
   }
 }
