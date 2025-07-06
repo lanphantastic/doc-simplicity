@@ -34,7 +34,7 @@ function FileUploader() {
       // Do nothing for now
       // toaster message
     }
-  }, []);
+  }, [handleUpload]);
 
   const statusIcons: {
     [key in StatusText]: JSX.Element;
