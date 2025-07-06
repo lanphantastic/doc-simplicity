@@ -16,13 +16,20 @@ function useUpload() {
   const [progress, setProgress] = useState<number | null>(null);
   const [fileId, setFileId] = useState<string | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { user } = useUser();
 
   const router = useRouter;
 
   const handleUpload = async (file: File) => {
-    if (!file || !user) return;
+    if (!file || !user) {
+      setError("No file selected or user not authenticated");
+      return;
+    }
+
+    // Reset error state
+    setError(null);
 
     // TODO: FREE/Pro Plan
 
@@ -51,48 +58,59 @@ function useUpload() {
       },
       (error) => {
         console.error("Error uploading file", error);
+        let errorMessage = "An error occurred during upload";
+
         switch (error.code) {
           case "storage/unauthorized":
-            console.error("User doesn't have permission to access the object");
+            errorMessage = "You don't have permission to upload files";
             break;
           case "storage/canceled":
-            console.error("User canceled the upload");
+            errorMessage = "Upload was canceled";
             break;
-
-          // ...
-
           case "storage/unknown":
-            console.error(
-              "Unknown error occurred, inspect error.serverResponse"
-            );
+            errorMessage = "Unknown error occurred during upload";
             break;
+          default:
+            errorMessage = error.message || "Upload failed";
         }
+
+        setError(errorMessage);
+        setProgress(null);
+        setStatus(null);
       },
       async () => {
         setStatus(StatusText.UPLOADED);
 
-        // Handle successful uploads on complete
-        // For instance, get the download URL: https://firebasestorage.googleapis.com/...
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        try {
+          // Handle successful uploads on complete
+          // For instance, get the download URL: https://firebasestorage.googleapis.com/...
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
 
-        setStatus(StatusText.SAVING);
-        await setDoc(doc(db, "users", user.id, "files", fileIdToUploadTo), {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          downloadUrl: downloadUrl,
-          ref: uploadTask.snapshot.ref.fullPath,
-          createdAt: serverTimestamp(),
-        });
-        setStatus(StatusText.GENERATING);
-        // Generate AI embeddings using the fileIdToUploadTo
-        await generateEmbeddings(fileIdToUploadTo);
-        setFileId(fileIdToUploadTo);
+          setStatus(StatusText.SAVING);
+          await setDoc(doc(db, "users", user.id, "files", fileIdToUploadTo), {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            downloadUrl: downloadUrl,
+            ref: uploadTask.snapshot.ref.fullPath,
+            createdAt: serverTimestamp(),
+          });
+
+          setStatus(StatusText.GENERATING);
+          // Generate AI embeddings using the fileIdToUploadTo
+          await generateEmbeddings(fileIdToUploadTo);
+          setFileId(fileIdToUploadTo);
+        } catch (err) {
+          console.error("Error in post-upload processing:", err);
+          setError("File uploaded but failed to process. Please try again.");
+          setProgress(null);
+          setStatus(null);
+        }
       }
     );
   };
 
-  return { progress, status, fileId, handleUpload };
+  return { progress, status, fileId, handleUpload, error };
 }
 
 export default useUpload;
