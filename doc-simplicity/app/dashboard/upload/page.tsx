@@ -1,3 +1,5 @@
+"use client";
+
 import FileUploader from "@/components/FileUploader";
 
 function UploadPage() {
