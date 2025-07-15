@@ -19,95 +19,114 @@ function useUpload() {
   const [error, setError] = useState<string | null>(null);
 
   const { user } = useUser();
+  const router = useRouter();
 
-  const router = useRouter;
+  // --- Observer Callbacks ---
+  const handleStateChanged = (snapshot: any) => {
+    const percent = calculatePercent(snapshot);
+    setStatus(StatusText.UPLOADING);
+    setProgress(percent);
+  };
 
-  const handleUpload = async (file: File) => {
+  const handleError = (
+    error: any,
+    unsubscribe: () => void,
+    reject: (reason?: any) => void
+  ) => {
+    let errorMessage = "An error occurred during upload";
+    switch (error.code) {
+      case "storage/unauthorized":
+        errorMessage = "You don't have permission to upload files";
+        break;
+      case "storage/canceled":
+        errorMessage = "Upload was canceled";
+        break;
+      case "storage/unknown":
+        errorMessage = "Unknown error occurred during upload";
+        break;
+      default:
+        errorMessage = error.message || "Upload failed";
+    }
+    setError(errorMessage);
+    setProgress(null);
+    setStatus(null);
+    unsubscribe();
+    reject(errorMessage);
+  };
+
+  const handleSuccess = async (
+    uploadTask: any,
+    file: File,
+    user: any,
+    fileIdToUploadTo: string,
+    unsubscribe: () => void,
+    resolve: (value: string) => void,
+    reject: (reason?: any) => void
+  ) => {
+    setStatus(StatusText.UPLOADED);
+    try {
+      const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      setStatus(StatusText.SAVING);
+      await setDoc(doc(db, "users", user.id, "files", fileIdToUploadTo), {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        downloadUrl: downloadUrl,
+        ref: uploadTask.snapshot.ref.fullPath,
+        createdAt: serverTimestamp(),
+      });
+      setStatus(StatusText.GENERATING);
+      await generateEmbeddings(fileIdToUploadTo);
+      setFileId(fileIdToUploadTo);
+      resolve(fileIdToUploadTo);
+    } catch (err) {
+      setError("File uploaded but failed to process. Please try again.");
+      setProgress(null);
+      setStatus(null);
+      reject("File uploaded but failed to process. Please try again.");
+    } finally {
+      unsubscribe();
+    }
+  };
+
+  const handleUpload = async (file: File): Promise<string> => {
     if (!file || !user) {
       setError("No file selected or user not authenticated");
-      return;
+      return Promise.reject("No file selected or user not authenticated");
     }
 
-    // Reset error state
+    // Reset state
     setError(null);
+    setProgress(null);
+    setStatus(null);
+    setFileId(null);
 
     // TODO: FREE/Pro Plan
 
     const fileIdToUploadTo = uuidv4();
-
     const storageRef = ref(
       storage,
       `users/${user.id}/files/${fileIdToUploadTo}`
     );
-
     const uploadTask = uploadBytesResumable(storageRef, file);
 
-    // Register three observers:
-    // 1. 'state_changed' observer, called any time the state changes
-    // 2. Error observer, called on failure
-    // 3. Completion observer, called on successful completion
-
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        // Observe state change events such as progress, pause, and resume
-        // Get task progress, including the number of bytes uploaded and the total number of bytes to be uploaded
-        const percent = calculatePercent(snapshot);
-        setStatus(StatusText.UPLOADING);
-        setProgress(percent);
-      },
-      (error) => {
-        console.error("Error uploading file", error);
-        let errorMessage = "An error occurred during upload";
-
-        switch (error.code) {
-          case "storage/unauthorized":
-            errorMessage = "You don't have permission to upload files";
-            break;
-          case "storage/canceled":
-            errorMessage = "Upload was canceled";
-            break;
-          case "storage/unknown":
-            errorMessage = "Unknown error occurred during upload";
-            break;
-          default:
-            errorMessage = error.message || "Upload failed";
-        }
-
-        setError(errorMessage);
-        setProgress(null);
-        setStatus(null);
-      },
-      async () => {
-        setStatus(StatusText.UPLOADED);
-
-        try {
-          // Handle successful uploads on complete
-          // For instance, get the download URL: https://firebasestorage.googleapis.com/...
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-
-          setStatus(StatusText.SAVING);
-          await setDoc(doc(db, "users", user.id, "files", fileIdToUploadTo), {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            downloadUrl: downloadUrl,
-            ref: uploadTask.snapshot.ref.fullPath,
-            createdAt: serverTimestamp(),
-          });
-
-          setStatus(StatusText.GENERATING);
-          // Generate AI embeddings using the fileIdToUploadTo
-          await generateEmbeddings(fileIdToUploadTo);
-          setFileId(fileIdToUploadTo);
-        } catch (err) {
-          console.error("Error in post-upload processing:", err);
-          setError("File uploaded but failed to process. Please try again.");
-          setProgress(null);
-          setStatus(null);
-        }
-      }
-    );
+    return new Promise<string>((resolve, reject) => {
+      const unsubscribe = uploadTask.on(
+        "state_changed",
+        (snapshot) => handleStateChanged(snapshot),
+        (error) => handleError(error, unsubscribe, reject),
+        () =>
+          handleSuccess(
+            uploadTask,
+            file,
+            user,
+            fileIdToUploadTo,
+            unsubscribe,
+            resolve,
+            reject
+          )
+      );
+    });
   };
 
   return { progress, status, fileId, handleUpload, error };

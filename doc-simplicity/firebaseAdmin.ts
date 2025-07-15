@@ -1,7 +1,10 @@
 import { initializeApp, getApps, App, getApp, cert, ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 let app: App;
+
+import serviceKey from "@/service_key.json";
 
 if (getApps().length === 0) {
   const serviceAccount: ServiceAccount = {
@@ -11,13 +14,15 @@ if (getApps().length === 0) {
   };
 
   app = initializeApp({
-    credential: cert(serviceAccount),
-    projectId: serviceAccount.projectId,
+    credential: cert(serviceKey as ServiceAccount),
+    projectId: serviceKey.project_id,
+    storageBucket: "doc-simplicity.firebasestorage.app",
   });
 } else {
   app = getApp();
 }
 
 const adminDb = getFirestore(app);
+const adminStorage = getStorage(app);
 
-export { app as adminApp, adminDb };
+export { app as adminApp, adminDb, adminStorage };
