@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 const Header = () => (
-  <div className="flex flex-col justify-center items-center mx-auto max-w-7xl px-6 lg:px-8">
+  <div className="flex flex-col justify-center items-center px-6 lg:px-8">
     <div className="mx-auto max-w-2xl sm:text-center">
       <h2 className="text-base font-semibold leading-7 text-indigo-600">
         Your Interactive Document Companion
@@ -17,8 +17,7 @@ const Header = () => (
         Introducing{" "}
         <span className="font-bold text-indigo-600">Chat with PDF</span>
         <br />
-        <br /> Upload your document, and our chatbot will answer questions,
-        summarize content, and answer all your questions. Ideal for everyone,{" "}
+        <br /> Upload your document, and our chatbot will answer your questions, summarize content, and provide insights. Ideal for everyone,{" "}
         <span className="text-indigo-600">Chat with PDF</span> turns static
         documents into <span className="font-bold">dynamic conversations</span>,
         enhancing productivity 10x fold effortlessly.
@@ -59,7 +58,7 @@ const FeaturesSection = () => (
 
 export default function Home() {
   return (
-    <main className="flex-1 overflow-scroll p-2 lg:p-5 bg-gradient-to-bl from-white to-indigo-600">
+    <main className="overflow-scroll p-2 lg:p-5 bg-gradient-to-bl from-white to-indigo-600">
       <div className="bg-white py-24 sm:py-32 rounded-md drop-shadow-xl">
         <Header />
         <ScreenshotSection />
